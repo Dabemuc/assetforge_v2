@@ -1,12 +1,10 @@
-package main
+package scraper
 
 import (
 	"backend/db"
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
-	"os/user"
 	"strconv"
 	"strings"
 	"time"
@@ -14,43 +12,13 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-var db_con *sql.DB
-
-func main() {
-
-	db_con = db.Establish_db_conn()
-
-	// Specify the path to Chrome/Chromium executable
-	const CHROME_EXEC_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-	var currentUser, _ = user.Current()
-	var username = currentUser.Username
-	var USER_DATA_DIR = fmt.Sprintf("/Users/%s/Library/Application Support/Google/Chrome/", username)
-	const PROFILE_DIRECTORY = "Default"
-	// options
-	opts := append(
-		chromedp.DefaultExecAllocatorOptions[:0], // No default options to provent chrome account login problems.
-		chromedp.ExecPath(CHROME_EXEC_PATH),
-		chromedp.DisableGPU,
-		chromedp.UserDataDir(USER_DATA_DIR),
-		chromedp.Flag("profile-directory", PROFILE_DIRECTORY),
-		chromedp.Flag("headless", false),
-		chromedp.Flag("flag-switches-begin", true),
-		chromedp.Flag("flag-switches-end", true),
-		chromedp.Flag("enable-automation", false),
-		chromedp.Flag("disable-blink-features", "AutomationControlled"),
-		chromedp.Flag("new-window", true),
-	)
-	// Create a custom Chrome allocator with the specified path
-	allocatorCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	defer cancel()
-
-	// Create a browser context
-	ctx, cancel := chromedp.NewContext(allocatorCtx)
-	defer cancel()
+func ScrapeList() {
 
 	const urlBaseSrting = "https://www.finanzfluss.de/informer/etf/suche?page=%d&per=100"
 
-	log.Println("Starting browser...")
+	log.Println("Starting list scraper ...")
+
+	var ctx = getChromdpCtx()
 
 	var maxPage int
 	err := chromedp.Run(ctx,
@@ -72,7 +40,7 @@ func main() {
 			chromedp.Navigate(url),
 			closePopup(),
 			awaitTableLoad(),
-			scrapeData(),
+			scrapeList(),
 		)
 		if err != nil {
 			log.Printf("Failed to execute chromedp tasks: %v", err)
@@ -131,23 +99,7 @@ func awaitTableLoad() chromedp.Tasks {
 	}
 }
 
-func closePopup() chromedp.Tasks {
-	return chromedp.Tasks{
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			// Try to close the popup if it appears
-			var popupExists bool
-			err := chromedp.EvaluateAsDevTools(`!!document.querySelector('#CybotCookiebotDialogBodyButtonDecline')`, &popupExists).Do(ctx)
-			if err != nil || !popupExists {
-				fmt.Println("Popup didn't appear.")
-				return nil
-			}
-			fmt.Println("Popup appeared! Closing...")
-			return chromedp.Click(`#CybotCookiebotDialogBodyButtonDecline`, chromedp.ByID).Do(ctx)
-		}),
-	}
-}
-
-func scrapeData() chromedp.Tasks {
+func scrapeList() chromedp.Tasks { // TODO: ADD scrape_date_base_data and fix isDistributing
 	return chromedp.Tasks{
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			var pageNr string
@@ -163,7 +115,7 @@ func scrapeData() chromedp.Tasks {
             url = url.substring(0, url.length-1)
         };
         id = url.split('/').pop();
-				return {
+        return {
           id: id,
 					name: el.querySelector('.name')?.innerText,
 					totalExpenseRatio: el.querySelector('.totalExpenseRatio')?.innerText,
@@ -201,7 +153,7 @@ func scrapeData() chromedp.Tasks {
 				if err_totalExpenseRatio != nil {
 					fmt.Println("Error parsing totalExpenseRatio:", err_totalExpenseRatio)
 				}
-				db.InsertOrUpdateEtf(db_con, result["id"], result["name"], result["fundVolume"], isDistributing, releaseDate, result["replicationMethod"], result["shareClassVolume"], float32(totalExpenseRatioFloat))
+				db.InsertOrUpdateEtf(result["id"], result["name"], result["fundVolume"], isDistributing, releaseDate, result["replicationMethod"], result["shareClassVolume"], float32(totalExpenseRatioFloat))
 				insertedCount++
 			}
 
