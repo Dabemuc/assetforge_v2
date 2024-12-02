@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"log"
 	"os/user"
 
 	"github.com/chromedp/chromedp"
@@ -15,16 +16,16 @@ func closePopup() chromedp.Tasks {
 			var popupExists bool
 			err := chromedp.EvaluateAsDevTools(`!!document.querySelector('#CybotCookiebotDialogBodyButtonDecline')`, &popupExists).Do(ctx)
 			if err != nil || !popupExists {
-				fmt.Println("Popup didn't appear.")
+				log.Println("Popup didn't appear.")
 				return nil
 			}
-			fmt.Println("Popup appeared! Closing...")
+			log.Println("Popup appeared! Closing...")
 			return chromedp.Click(`#CybotCookiebotDialogBodyButtonDecline`, chromedp.ByID).Do(ctx)
 		}),
 	}
 }
 
-func getChromdpCtx() context.Context {
+func getChromdpCtx() (context.Context, context.CancelFunc) {
 	// Specify the path to Chrome/Chromium executable
 	const CHROME_EXEC_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 	var currentUser, _ = user.Current()
@@ -45,13 +46,11 @@ func getChromdpCtx() context.Context {
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
 		chromedp.Flag("new-window", true),
 	)
-	// Create a custom Chrome allocator with the specified path
-	allocatorCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	defer cancel()
+	allocatorCtx, allocatorCancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	ctx, ctxCancel := chromedp.NewContext(allocatorCtx)
 
-	// Create a browser context
-	ctx, cancel := chromedp.NewContext(allocatorCtx)
-	defer cancel()
-
-	return ctx
+	return ctx, func() {
+		ctxCancel()
+		allocatorCancel()
+	}
 }

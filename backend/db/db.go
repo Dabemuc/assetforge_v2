@@ -65,9 +65,11 @@ func InsertOrUpdateEtf(id string, name string, fundVolume string, isDistributing
 	// Ensure releaseDate is only a date, not a timestamp.
 	releaseDate = releaseDate.Truncate(24 * time.Hour)
 
+	scrape_date_base_data := time.Now()
+
 	var queryString = `
-		INSERT INTO t_etf (id, name, fundVolume, isDistributing, releaseDate, replicationMethod, shareClassVolume, totalExpenseRatio)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO t_etf (id, name, fundVolume, isDistributing, releaseDate, replicationMethod, shareClassVolume, totalExpenseRatio, scrape_date_base_data)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (id)
 		DO UPDATE SET
 			name = EXCLUDED.name,
@@ -76,9 +78,10 @@ func InsertOrUpdateEtf(id string, name string, fundVolume string, isDistributing
 			releaseDate = EXCLUDED.releaseDate,
 			replicationMethod = EXCLUDED.replicationMethod,
 			shareClassVolume = EXCLUDED.shareClassVolume,
-			totalExpenseRatio = EXCLUDED.totalExpenseRatio`
+			totalExpenseRatio = EXCLUDED.totalExpenseRatio,
+      scrape_date_base_data = EXCLUDED.scrape_date_base_data`
 
-	_, err := db.Exec(queryString, id, name, fundVolume, isDistributing, releaseDate, replicationMethod, shareClassVolume, totalExpenseRatio)
+	_, err := db.Exec(queryString, id, name, fundVolume, isDistributing, releaseDate, replicationMethod, shareClassVolume, totalExpenseRatio, scrape_date_base_data)
 	if err != nil {
 		log.Printf("Error executing query: %v", err)
 	}

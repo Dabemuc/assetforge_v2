@@ -18,7 +18,8 @@ func ScrapeEtf() {
 
 	log.Println("Starting etf scraper ...")
 
-	var ctx = getChromdpCtx()
+	ctx, cancel := getChromdpCtx()
+	defer cancel() // Make sure to clean up when done.
 
 	var id = "ie00b5bmr087"
 

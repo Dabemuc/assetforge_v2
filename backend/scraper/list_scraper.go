@@ -18,7 +18,8 @@ func ScrapeList() {
 
 	log.Println("Starting list scraper ...")
 
-	var ctx = getChromdpCtx()
+	ctx, cancel := getChromdpCtx()
+	defer cancel() // Make sure to clean up when done.
 
 	var maxPage int
 	err := chromedp.Run(ctx,
@@ -31,22 +32,47 @@ func ScrapeList() {
 
 	var currPage = 1
 	log.Println("Maxpage:", maxPage)
+	var renderedPageNr int
 
 	for currPage <= maxPage {
 		var url = fmt.Sprintf(urlBaseSrting, currPage)
-		log.Println("Scraping url ", url)
+		log.Println("##### Scraping url ", url)
 
 		err := chromedp.Run(ctx,
 			chromedp.Navigate(url),
 			closePopup(),
 			awaitTableLoad(),
-			scrapeList(),
+			getRenderedPage(&renderedPageNr),
 		)
 		if err != nil {
 			log.Printf("Failed to execute chromedp tasks: %v", err)
 		}
-		currPage++
+		if renderedPageNr == currPage {
+			err := chromedp.Run(ctx,
+				scrapeList(),
+			)
+			if err != nil {
+				log.Printf("Failed to execute chromedp tasks: %v", err)
+			}
+			log.Println("Page", currPage, "scraped successfully!")
+			currPage++
+		} else {
+			log.Println("renderedPageNr", renderedPageNr, "does not equal targeted pagenr", currPage, "- Redoing this page")
+		}
 	}
+}
+
+func getRenderedPage(renderedPageNr *int) chromedp.Tasks {
+	return chromedp.Tasks{
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			err := chromedp.Evaluate(`parseInt(document.querySelector("button.pagination-number.current-number").innerText)`, &renderedPageNr).Do(ctx)
+			if err != nil {
+				return fmt.Errorf("Error evaluating renderedPageNr: %w", err)
+			}
+			return nil
+		}),
+	}
+
 }
 
 func getMaxPage(maxPage *int) chromedp.Tasks {
@@ -56,7 +82,6 @@ func getMaxPage(maxPage *int) chromedp.Tasks {
 			if err != nil {
 				return fmt.Errorf("error evaluating maxPage: %w", err)
 			}
-			log.Println("Max page:", maxPage)
 			return nil
 		}),
 	}
@@ -69,7 +94,7 @@ func awaitTableLoad() chromedp.Tasks {
 			var numRows int
 			start := time.Now()
 
-			timeout := 30 * time.Second
+			timeout := 10 * time.Second
 
 			for {
 				// Evaluate the number of rows in the table
@@ -99,17 +124,11 @@ func awaitTableLoad() chromedp.Tasks {
 	}
 }
 
-func scrapeList() chromedp.Tasks { // TODO: ADD scrape_date_base_data and fix isDistributing
+func scrapeList() chromedp.Tasks {
 	return chromedp.Tasks{
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			var pageNr string
-			err := chromedp.Evaluate(`document.querySelector("button.pagination-number.current-number").innerText`, &pageNr).Do(ctx)
-			if err != nil {
-				return err
-			}
-			log.Println("Scraping page nr", pageNr)
 			var results []map[string]string
-			err = chromedp.Evaluate(`Array.from(document.querySelectorAll('#main > div.page-content > div > div.informer-search > div.main-content > div.results-table > div > div.table-container > table > tbody > tr')).map(el => {
+			err := chromedp.Evaluate(`Array.from(document.querySelectorAll('#main > div.page-content > div > div.informer-search > div.main-content > div.results-table > div > div.table-container > table > tbody > tr')).map(el => {
         url = el.querySelector('.name a')?.href;
         if (url.endsWith('/')) {
             url = url.substring(0, url.length-1)
@@ -119,7 +138,7 @@ func scrapeList() chromedp.Tasks { // TODO: ADD scrape_date_base_data and fix is
           id: id,
 					name: el.querySelector('.name')?.innerText,
 					totalExpenseRatio: el.querySelector('.totalExpenseRatio')?.innerText,
-					isDistributing: el.querySelector('.isDistributing')?.innerText || "false",
+					isDistributing: (!!el.querySelector('svg path[d^="M21.8371"]')).toString() || "false",
 					replicationMethod: el.querySelector('.replicationMethod')?.innerText,
 					fundVolume: el.querySelector('.fundVolume')?.innerText,
 					shareClassVolume: el.querySelector('.shareClassVolume')?.innerText,
