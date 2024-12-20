@@ -2,11 +2,13 @@ package main
 
 import (
 	"backend/db"
-	//"backend/scraper"
+	"backend/scraper"
 	"fmt"
-	_ "github.com/lib/pq"
 	"log"
 	"net/http"
+	"os"
+
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -14,6 +16,11 @@ func main() {
 
 	// Establish connection to db
 	db.Establish_db_conn()
+
+	//id := "ie00b579f325"
+
+	scraper.ScrapeEtf(nil)
+	os.Exit(0)
 
 	// Start Server
 	start_server()

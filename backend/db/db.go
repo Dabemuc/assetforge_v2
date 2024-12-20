@@ -181,7 +181,7 @@ type EtfDetailsData struct {
 func UpdateEtfDetails(data EtfDetailsData) error {
 	var scrapeDateDetails = time.Now()
 
-	// parse
+	// Parse
 	var weight_top_10 = strings.TrimSpace(data.WeightTop10)
 	weight_top_10 = strings.TrimSuffix(weight_top_10, "%")
 	weight_top_10 = strings.ReplaceAll(weight_top_10, "\u00a0", "")
@@ -189,105 +189,192 @@ func UpdateEtfDetails(data EtfDetailsData) error {
 	var weight_top_10_float, err_weight_top_10_float = strconv.ParseFloat(weight_top_10, 32)
 	weight_top_10_float = weight_top_10_float / 100
 	if err_weight_top_10_float != nil {
-		fmt.Println("Error parsing totalExpenseRatio:", err_weight_top_10_float)
+		fmt.Println("Error parsing weight_top_10:", err_weight_top_10_float)
 	}
 
-	// Convert JSON fields to string
-	countryComposition, err := json.Marshal(data.CountryComposition)
-	if err != nil {
-		return err
-	}
-	regionComposition, err := json.Marshal(data.RegionComposition)
-	if err != nil {
-		return err
-	}
-	currencyDistribution, err := json.Marshal(data.CurrencyDistribution)
-	if err != nil {
-		return err
-	}
-	top10Holdings, err := json.Marshal(data.Top10Holdings)
-	if err != nil {
-		return err
-	}
-	industryDistribution, err := json.Marshal(data.IndustryDistribution)
-	if err != nil {
-		return err
-	}
-	activityDistribution, err := json.Marshal(data.ActivityDistribution)
-	if err != nil {
-		return err
-	}
-	historicalPerformance, err := json.Marshal(data.HistoricalPerformance)
-	if err != nil {
-		return err
-	}
-	historicalVolatility, err := json.Marshal(data.HistoricalVolatility)
-	if err != nil {
-		return err
-	}
-	historicalMaxDrawdown, err := json.Marshal(data.HistoricalMaxDrawdown)
-	if err != nil {
-		return err
-	}
-	historicalSharpeRatio, err := json.Marshal(data.HistoricalSharpeRatio)
-	if err != nil {
-		return err
-	}
-	exchanges, err := json.Marshal(data.Exchanges)
-	if err != nil {
-		return err
+	// Convert all fields to sql.NullXXX types
+	fields := map[string]interface{}{
+		"ISIN":                       sql.NullString{String: data.ISIN, Valid: data.ISIN != ""},
+		"WKN":                        sql.NullString{String: data.WKN, Valid: data.WKN != ""},
+		"NrPositions":                sql.NullInt64{Int64: parseToInt64(data.NrPositions), Valid: data.NrPositions != "" && data.NrPositions != "—"},
+		"BaseIndex":                  sql.NullString{String: data.BaseIndex, Valid: data.BaseIndex != ""},
+		"ShareClassVolume":           sql.NullString{String: data.ShareClassVolume, Valid: data.ShareClassVolume != ""},
+		"FundDomicile":               sql.NullString{String: data.FundDomicile, Valid: data.FundDomicile != ""},
+		"FundCurrency":               sql.NullString{String: data.FundCurrency, Valid: data.FundCurrency != ""},
+		"SecuritiesLendingPermitted": sql.NullBool{Bool: data.SecuritiesLendingPermitted, Valid: true},
+		"TradeCurrency":              sql.NullString{String: data.TradeCurrency, Valid: data.TradeCurrency != ""},
+		"HasCurrencyHedging":         sql.NullBool{Bool: data.HasCurrencyHedging, Valid: true},
+		"HasSpecialAssets":           sql.NullBool{Bool: data.HasSpecialAssets, Valid: true},
+		"FundProvider":               sql.NullString{String: data.FundProvider, Valid: data.FundProvider != ""},
+		"LegalStructure":             sql.NullString{String: data.LegalStructure, Valid: data.LegalStructure != ""},
+		"FundStructure":              sql.NullString{String: data.FundStructure, Valid: data.FundStructure != ""},
+		"Administrator":              sql.NullString{String: data.Administrator, Valid: data.Administrator != ""},
+		"Depotbank":                  sql.NullString{String: data.Depotbank, Valid: data.Depotbank != ""},
+		"Auditor":                    sql.NullString{String: data.Auditor, Valid: data.Auditor != ""},
+		"CountryComposition":         sql.NullString{String: marshalJSON(data.CountryComposition), Valid: data.CountryComposition != nil},
+		"RegionComposition":          sql.NullString{String: marshalJSON(data.RegionComposition), Valid: data.RegionComposition != nil},
+		"CurrencyDistribution":       sql.NullString{String: marshalJSON(data.CurrencyDistribution), Valid: data.CurrencyDistribution != nil},
+		"Top10Holdings":              sql.NullString{String: marshalJSON(data.Top10Holdings), Valid: data.Top10Holdings != nil},
+		"IndustryDistribution":       sql.NullString{String: marshalJSON(data.IndustryDistribution), Valid: data.IndustryDistribution != nil},
+		"ActivityDistribution":       sql.NullString{String: marshalJSON(data.ActivityDistribution), Valid: data.ActivityDistribution != nil},
+		"HistoricalPerformance":      sql.NullString{String: marshalJSON(data.HistoricalPerformance), Valid: data.HistoricalPerformance != nil},
+		"HistoricalVolatility":       sql.NullString{String: marshalJSON(data.HistoricalVolatility), Valid: data.HistoricalVolatility != nil},
+		"HistoricalMaxDrawdown":      sql.NullString{String: marshalJSON(data.HistoricalMaxDrawdown), Valid: data.HistoricalMaxDrawdown != nil},
+		"HistoricalSharpeRatio":      sql.NullString{String: marshalJSON(data.HistoricalSharpeRatio), Valid: data.HistoricalSharpeRatio != nil},
+		"Exchanges":                  sql.NullString{String: marshalJSON(data.Exchanges), Valid: data.Exchanges != nil},
+		"WeightTop10":                sql.NullFloat64{Float64: weight_top_10_float, Valid: err_weight_top_10_float == nil},
+		"NrStockPositions":           sql.NullInt64{Int64: parseToInt64(data.NrStockPositions), Valid: data.NrStockPositions != ""},
+		"NrBondPositions":            sql.NullInt64{Int64: parseToInt64(data.NrBondPositions), Valid: data.NrBondPositions != ""},
+		"NrCashAndOtherPositions":    sql.NullInt64{Int64: parseToInt64(data.NrCashAndOtherPositions), Valid: data.NrCashAndOtherPositions != ""},
 	}
 
+	// Validate fields
+	if err := ValidateNullFields(fields); err != nil {
+		log.Printf("Validation failed: %v", err)
+	}
+
+	// Prepare query arguments in the correct order
+	queryArgs := []interface{}{
+		data.Id, // First argument is always the ID
+		fields["ISIN"],
+		fields["WKN"],
+		fields["NrPositions"],
+		fields["BaseIndex"],
+		fields["ShareClassVolume"],
+		fields["FundDomicile"],
+		fields["FundCurrency"],
+		fields["SecuritiesLendingPermitted"],
+		fields["TradeCurrency"],
+		fields["HasCurrencyHedging"],
+		fields["HasSpecialAssets"],
+		fields["FundProvider"],
+		fields["LegalStructure"],
+		fields["FundStructure"],
+		fields["Administrator"],
+		fields["Depotbank"],
+		fields["Auditor"],
+		fields["CountryComposition"],
+		fields["RegionComposition"],
+		fields["CurrencyDistribution"],
+		fields["WeightTop10"],
+		fields["NrStockPositions"],
+		fields["NrBondPositions"],
+		fields["NrCashAndOtherPositions"],
+		fields["Top10Holdings"],
+		fields["IndustryDistribution"],
+		fields["ActivityDistribution"],
+		fields["HistoricalPerformance"],
+		fields["HistoricalVolatility"],
+		fields["HistoricalMaxDrawdown"],
+		fields["HistoricalSharpeRatio"],
+		fields["Exchanges"],
+		scrapeDateDetails, // Last argument is scrape date
+	}
+
+	// Execute query with nullable fields
 	query := `
-		UPDATE t_etf SET
-			isin = $2,
-			wkn = $3,
-			nr_positions = $4,
-			base_index = $5,
-			share_class_volume = $6,
-			fund_domicile = $7,
-			fund_currency = $8,
-			securities_lending_permitted = $9,
-			trade_currency = $10,
-			has_currency_hedging = $11,
-			has_special_assets = $12,
-			fund_provider = $13,
-			legal_structure = $14,
-			fund_structure = $15,
-			administrator = $16,
-			depotbank = $17,
-			auditor = $18,
-			country_composition = $19,
-			region_composition = $20,
-			currency_distribution = $21,
-			weight_top_10 = $22,
-			nr_stock_positions = $23,
-			nr_bond_positions = $24,
-			nr_cash_and_other_positions = $25,
-			top_10_holdings = $26,
-			industry_distribution = $27,
-			activity_distribution = $28,
-			historical_performance = $29,
-			historical_volatility = $30,
-			historical_max_drawdown = $31,
-			historical_sharpe_ratio = $32,
-			exchanges = $33,
-			scrape_date_details = $34
-		WHERE id = $1
-	`
+        UPDATE t_etf SET
+            isin = $2,
+            wkn = $3,
+            nr_positions = $4,
+            base_index = $5,
+            share_class_volume = $6,
+            fund_domicile = $7,
+            fund_currency = $8,
+            securities_lending_permitted = $9,
+            trade_currency = $10,
+            has_currency_hedging = $11,
+            has_special_assets = $12,
+            fund_provider = $13,
+            legal_structure = $14,
+            fund_structure = $15,
+            administrator = $16,
+            depotbank = $17,
+            auditor = $18,
+            country_composition = $19,
+            region_composition = $20,
+            currency_distribution = $21,
+            weight_top_10 = $22,
+            nr_stock_positions = $23,
+            nr_bond_positions = $24,
+            nr_cash_and_other_positions = $25,
+            top_10_holdings = $26,
+            industry_distribution = $27,
+            activity_distribution = $28,
+            historical_performance = $29,
+            historical_volatility = $30,
+            historical_max_drawdown = $31,
+            historical_sharpe_ratio = $32,
+            exchanges = $33,
+            scrape_date_details = $34
+        WHERE id = $1
+    `
 
-	_, err = db.Exec(query, data.Id, data.ISIN, data.WKN, data.NrPositions, data.BaseIndex, data.ShareClassVolume,
-		data.FundDomicile, data.FundCurrency, data.SecuritiesLendingPermitted, data.TradeCurrency,
-		data.HasCurrencyHedging, data.HasSpecialAssets, data.FundProvider, data.LegalStructure,
-		data.FundStructure, data.Administrator, data.Depotbank, data.Auditor, countryComposition,
-		regionComposition, currencyDistribution, weight_top_10_float, data.NrStockPositions,
-		data.NrBondPositions, data.NrCashAndOtherPositions, top10Holdings, industryDistribution,
-		activityDistribution, historicalPerformance, historicalVolatility, historicalMaxDrawdown,
-		historicalSharpeRatio, exchanges, scrapeDateDetails)
+	_, err := db.Exec(query, queryArgs...)
 	if err != nil {
 		log.Printf("Error executing update: %v", err)
 		return err
 	}
 
+	log.Println("Updated etf details for id", data.Id)
 	return nil
+}
+
+func ValidateNullFields(fields map[string]interface{}) error {
+	var warnings []string
+
+	for fieldName, fieldValue := range fields {
+		valid := true
+
+		switch v := fieldValue.(type) {
+		case sql.NullString:
+			valid = v.Valid
+		case sql.NullInt64:
+			valid = v.Valid
+		case sql.NullFloat64:
+			valid = v.Valid
+		case sql.NullBool:
+			valid = v.Valid
+		default:
+			warnings = append(warnings, fmt.Sprintf("Unknown field type for %s", fieldName))
+		}
+
+		if !valid {
+			warnings = append(warnings, fmt.Sprintf("%s is invalid", fieldName))
+		}
+	}
+
+	if len(warnings) > 0 {
+		return fmt.Errorf("Validation warnings: %v", strings.Join(warnings, ", "))
+	}
+
+	return nil
+}
+
+func parseToInt64(value string) int64 {
+	v, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+func marshalJSON(data interface{}) string {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func GetAllIds() (*sql.Rows, error) {
+	query := "select id from t_etf;"
+	rows, err := db.Query(query)
+	return rows, err
+}
+
+func GetAllIdsWhereNoDetails() (*sql.Rows, error) {
+	query := "select id from t_etf where scrape_date_details is NULL;"
+	rows, err := db.Query(query)
+	return rows, err
 }
